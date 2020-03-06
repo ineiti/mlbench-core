@@ -51,6 +51,14 @@ def _construct_filter_pred(min_len, max_len):
     return filter_pred
 
 
+def _pad_vocabulary(math):
+    if math == 'fp16' or math == 'manual_fp16':
+        pad_vocab = 8
+    elif math == 'fp32':
+        pad_vocab = 1
+    return pad_vocab
+
+
 class WMT14Dataset(nlp_datasets.WMT14):
     def __init__(
             self,
@@ -63,7 +71,7 @@ class WMT14Dataset(nlp_datasets.WMT14):
             include_lengths=True,
             min_len=0,
             max_len=None,
-            vocab_pad=1,
+            math_precision="fp32",
             max_size=None,
     ):
         """WMT14 Dataset.
@@ -92,7 +100,8 @@ class WMT14Dataset(nlp_datasets.WMT14):
 
         for i in self.fields:
             i.build_vocab_from_file(os.path.join(path, config.VOCAB_FNAME),
-                                    pad=vocab_pad, max_size=max_size)
+                                    pad=_pad_vocabulary(math_precision),
+                                    max_size=max_size)
 
         if train:
             path = os.path.join(path, config.TRAIN_FNAME)
@@ -132,6 +141,5 @@ class WMT14Dataset(nlp_datasets.WMT14):
             shuffle=shuffle,
             sort_within_batch=True,
             device=device,
-            sort_key=lambda x: torchtext.data.interleave_keys(len(x.src),
-                                                              len(x.trg)))
+            sort_key=lambda x: len(x.src))
         return train_iter

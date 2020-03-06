@@ -1,11 +1,17 @@
-from mlbench_core.utils.pytorch.distributed import AllReduceAggregation
-from mlbench_core.utils.pytorch.distributed import DecentralizedAggregation
-
 import numpy as np
 import torch
 import torch.distributed as dist
+<<<<<<< HEAD
 from torch.optim import SGD, Adam
+=======
+from mlbench_core.utils.pytorch.distributed import AllReduceAggregation
+from mlbench_core.utils.pytorch.distributed import DecentralizedAggregation
+from torch.nn.utils import clip_grad_norm_
+from torch.optim import SGD
+>>>>>>> Add GNMT NLL loss, optimization algos and controlflow
 from torch.optim.optimizer import Optimizer, required
+
+
 
 
 class SparsifiedSGD(Optimizer):
@@ -16,16 +22,19 @@ class SparsifiedSGD(Optimizer):
             parameter groups
         lr (float): learning rate
         weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
-        sparse_grad_size (int): Size of the sparsified gradients vector (default: 10).
+        sparse_grad_size (int): Size of the sparsified gradients vector (
+        default: 10).
 
     """
 
-    def __init__(self, params, lr=required, weight_decay=0, sparse_grad_size=10):
+    def __init__(self, params, lr=required, weight_decay=0,
+                 sparse_grad_size=10):
 
         if lr is not required and lr < 0.0:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if weight_decay < 0.0:
-            raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
+            raise ValueError(
+                "Invalid weight_decay value: {}".format(weight_decay))
 
         defaults = dict(lr=lr, weight_decay=weight_decay)
 
@@ -37,7 +46,8 @@ class SparsifiedSGD(Optimizer):
         self.num_coordinates = sparse_grad_size
 
     def __create_weighted_average_params(self):
-        r""" Create a memory to keep the weighted average of parameters in each iteration """
+        r""" Create a memory to keep the weighted average of parameters in
+        each iteration """
         for group in self.param_groups:
             for p in group["params"]:
                 param_state = self.state[p]
@@ -46,7 +56,8 @@ class SparsifiedSGD(Optimizer):
                 param_state["estimated_w"].copy_(p.data)
 
     def __create_gradients_memory(self):
-        r""" Create a memory to keep gradients that are not used in each iteration """
+        r""" Create a memory to keep gradients that are not used in each
+        iteration """
         for group in self.param_groups:
             for p in group["params"]:
                 param_state = self.state[p]
@@ -83,7 +94,8 @@ class SparsifiedSGD(Optimizer):
         """ Calls one of the sparsification functions (random or blockwise)
 
         Args:
-            random_sparse (bool): Indicates the way we want to make the gradients sparse
+            random_sparse (bool): Indicates the way we want to make the
+            gradients sparse
                 (random or blockwise) (default: False)
             param (:obj: `torch.nn.Parameter`): Model parameter
         """
@@ -136,9 +148,9 @@ class SparsifiedSGD(Optimizer):
         sparse_tensor = torch.zeros(1, output_size)
         sparse_tensor[0, 0] = begin_index
         sparse_tensor[0, 1:] = self.state[param]["memory"][
-            0, begin_index : end_index + 1
-        ]
-        self.state[param]["memory"][0, begin_index : end_index + 1] = 0
+                               0, begin_index: end_index + 1
+                               ]
+        self.state[param]["memory"][0, begin_index: end_index + 1] = 0
 
         return sparse_tensor
 
@@ -154,12 +166,14 @@ class SparsifiedSGD(Optimizer):
             for param in group["params"]:
                 tau = param.data.size()[1] / sparse_vector_size
                 rho = (
-                    6
-                    * ((t + tau) ** 2)
-                    / ((1 + t) * (6 * (tau ** 2) + t + 6 * tau * t + 2 * (t ** 2)))
+                        6
+                        * ((t + tau) ** 2)
+                        / ((1 + t) * (
+                        6 * (tau ** 2) + t + 6 * tau * t + 2 * (t ** 2)))
                 )
                 self.state[param]["estimated_w"] = (
-                    self.state[param]["estimated_w"] * (1 - rho) + param.data * rho
+                        self.state[param]["estimated_w"] * (
+                        1 - rho) + param.data * rho
                 )
 
     def get_estimated_weights(self):
@@ -172,27 +186,31 @@ class SparsifiedSGD(Optimizer):
 
 
 class CentralizedSparsifiedSGD(SparsifiedSGD):
-    r"""Implements centralized sparsified version of stochastic gradient descent.
+    r"""Implements centralized sparsified version of stochastic gradient
+    descent.
 
     Args:
         params (iterable): iterable of parameters to optimize or dicts defining
             parameter groups
         lr (float): Learning rate
         weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
-        sparse_grad_size (int): Size of the sparsified gradients vector (default: 10)
-        random_sparse (bool): Whether select random sparsification (default: `False`)
-        average_models (bool): Whether to average models together (default: `True`)
+        sparse_grad_size (int): Size of the sparsified gradients vector (
+        default: 10)
+        random_sparse (bool): Whether select random sparsification (default:
+        `False`)
+        average_models (bool): Whether to average models together (default:
+        `True`)
 
     """
 
     def __init__(
-        self,
-        params,
-        lr=required,
-        weight_decay=0,
-        sparse_grad_size=10,
-        random_sparse=False,
-        average_models=True,
+            self,
+            params,
+            lr=required,
+            weight_decay=0,
+            sparse_grad_size=10,
+            random_sparse=False,
+            average_models=True,
     ):
         self.average_models = average_models
         self.world_size = dist.get_world_size()
@@ -205,7 +223,8 @@ class CentralizedSparsifiedSGD(SparsifiedSGD):
         """ Aggregates the gradients and performs a single optimization step.
 
             Arguments:
-                closure (callable, optional): A closure that reevaluates the model and returns the loss.
+                closure (callable, optional): A closure that reevaluates the
+                model and returns the loss.
         """
 
         loss = None
@@ -223,7 +242,8 @@ class CentralizedSparsifiedSGD(SparsifiedSGD):
                 sparse_tensor = self.sparsify_gradients(p, lr)
                 # Aggregate the gradients
                 gathered_list = [
-                    torch.zeros_like(sparse_tensor) for _ in range(self.world_size)
+                    torch.zeros_like(sparse_tensor) for _ in
+                    range(self.world_size)
                 ]
                 dist.all_gather(gathered_list, sparse_tensor)
                 p.grad.data = torch.zeros_like(p.grad.data)
@@ -231,15 +251,16 @@ class CentralizedSparsifiedSGD(SparsifiedSGD):
                 if self.random_sparse:
                     for grad_tensor in gathered_list:
                         for index in range(grad_tensor.size()[1]):
-                            p.grad.data[0, int(grad_tensor[0, index])] += grad_tensor[
-                                1, index
-                            ]
+                            p.grad.data[0, int(grad_tensor[0, index])] += \
+                                grad_tensor[
+                                    1, index
+                                ]
                 else:
                     for grad_tensor in gathered_list:
                         tensor_size = grad_tensor.size()[1]
                         begin = int(grad_tensor[0, 0])
                         p.grad.data[
-                            0, begin : (begin + tensor_size - 1)
+                        0, begin: (begin + tensor_size - 1)
                         ] += grad_tensor[0, 1:]
 
                 if self.average_models:
@@ -257,7 +278,8 @@ class CentralizedSparsifiedSGD(SparsifiedSGD):
 
 
 class DecentralizedSGD(SGD):
-    r"""Implements decentralized stochastic gradient descent (optionally with momentum).
+    r"""Implements decentralized stochastic gradient descent (optionally
+    with momentum).
 
     Args:
         rank (int): rank of current process in the network
@@ -268,21 +290,22 @@ class DecentralizedSGD(SGD):
         weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
         dampening (float, optional): dampening for momentum (default: 0)
         nesterov (bool, optional): enables Nesterov momentum (default: False)
-        average_models (bool): Whether to average models together. (default: `True`)
+        average_models (bool): Whether to average models together. (default:
+        `True`)
 
     """
 
     def __init__(
-        self,
-        rank,
-        neighbors,
-        model,
-        lr=required,
-        momentum=0,
-        dampening=0,
-        weight_decay=0,
-        nesterov=False,
-        average_models=True,
+            self,
+            rank,
+            neighbors,
+            model,
+            lr=required,
+            momentum=0,
+            dampening=0,
+            weight_decay=0,
+            nesterov=False,
+            average_models=True,
     ):
         super(DecentralizedSGD, self).__init__(
             model.parameters(), lr, momentum, dampening, weight_decay, nesterov
@@ -291,7 +314,8 @@ class DecentralizedSGD(SGD):
         if average_models:
             self.agg_mode = "avg"
         else:
-            raise NotImplementedError("Only average model is supported right now.")
+            raise NotImplementedError(
+                "Only average model is supported right now.")
 
         self.model = model
         self.agg = DecentralizedAggregation(rank, neighbors).agg_model
@@ -310,7 +334,8 @@ class DecentralizedSGD(SGD):
 
 
 class CentralizedSGD(SGD):
-    r"""Implements centralized stochastic gradient descent (optionally with momentum).
+    r"""Implements centralized stochastic gradient descent (optionally with
+    momentum).
 
     Args:
         world_size (int): Size of the network
@@ -320,20 +345,21 @@ class CentralizedSGD(SGD):
         weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
         dampening (float, optional): dampening for momentum (default: 0)
         nesterov (bool, optional): enables Nesterov momentum (default: False)
-        average_models (bool): Whether to average models together. (default: `True`)
+        average_models (bool): Whether to average models together. (default:
+        `True`)
 
     """
 
     def __init__(
-        self,
-        world_size,
-        model,
-        lr=required,
-        momentum=0,
-        dampening=0,
-        weight_decay=0,
-        nesterov=False,
-        average_models=True,
+            self,
+            world_size,
+            model,
+            lr=required,
+            momentum=0,
+            dampening=0,
+            weight_decay=0,
+            nesterov=False,
+            average_models=True,
     ):
         super(CentralizedSGD, self).__init__(
             model.parameters(), lr, momentum, dampening, weight_decay, nesterov
@@ -341,7 +367,8 @@ class CentralizedSGD(SGD):
         if average_models:
             self.agg_mode = "avg"
         else:
-            raise NotImplementedError("Only average model is supported right now.")
+            raise NotImplementedError(
+                "Only average model is supported right now.")
 
         self.model = model
         self.agg = AllReduceAggregation(world_size=world_size).agg_grad
@@ -369,7 +396,8 @@ class SignSGD(SGD):
         weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
         dampening (float, optional): dampening for momentum (default: 0)
         nesterov (bool, optional): enables Nesterov momentum (default: False)
-        average_models (bool): Whether to average models together. (default: `True`)
+        average_models (bool): Whether to average models together. (default:
+        `True`)
 
     """
 
@@ -399,7 +427,8 @@ class SignSGD(SGD):
                 if momentum != 0:
                     param_state = self.state[p]
                     if "momentum_buffer" not in param_state:
-                        buf = param_state["momentum_buffer"] = torch.zeros_like(p.data)
+                        buf = param_state[
+                            "momentum_buffer"] = torch.zeros_like(p.data)
                         buf.mul_(momentum).add_(d_p)
                     else:
                         buf = param_state["momentum_buffer"]
@@ -413,7 +442,7 @@ class SignSGD(SGD):
                 p.data.add_(-group["lr"], torch.sign(d_p))
 
         return loss
-    
+
 class CentralizedAdam(Adam):
     r"""Implements centralized Adam algorithm.
 
@@ -465,3 +494,76 @@ class CentralizedAdam(Adam):
         self.agg(self.model, self.agg_mode)
         loss = super(CentralizedAdam, self).step(closure=closure)
         return loss
+
+class FP32Optimizer:
+    """
+    Standard optimizer, computes backward and applies weight update.
+    """
+
+    def __init__(self, params, optimizer, grad_clip=None):
+        """
+        Constructor for the Fp32Optimizer
+
+        :param grad_clip: coefficient for gradient clipping, max L2 norm of the
+            gradients
+        """
+        self.grad_clip = grad_clip
+        self.optimizer = optimizer
+        self.params = params
+
+    def zero_grad(self):
+        self.optimizer.zero_grad()
+
+    def step(self):
+        """
+        Performs one step of the optimizer.
+
+        """
+        if self.grad_clip != float('inf'):
+            clip_grad_norm_(parameters=self.params, max_norm=self.grad_clip)
+
+        self.optimizer.step()
+
+
+# TODO: Add FP16Optimizer
+
+
+# class AMPOptimizer:
+#     """
+#     Optimizer compatible with AMP.
+#     Uses AMP to apply loss scaling, computes backward and applies weight
+#     update.
+#     """
+#     def __init__(self, params, grad_clip=None, loss_scale=8192,
+#                  dls_upscale_interval=128):
+#         """
+#         Constructor for the AMPOptimizer
+#
+#         :param model: model
+#         :param grad_clip: coefficient for gradient clipping, max L2 norm of the
+#             gradients
+#         """
+#         self.grad_clip = grad_clip
+#         self.params = params
+#         loss_scaler = apex.amp._amp_state.loss_scalers[0]
+#         loss_scaler._loss_scale = loss_scale
+#         loss_scaler._scale_seq_len = dls_upscale_interval
+#
+#
+#     def step(self, loss, optimizer, scheduler, update=True):
+#         """
+#         Performs one step of the optimizer.
+#
+#         :param loss: value of loss function
+#         :param optimizer: optimizer
+#         :param update: if True executes weight update
+#         """
+#         with amp.scale_loss(loss, optimizer) as scaled_loss:
+#             scaled_loss.backward()
+#
+#         if update:
+#             if self.grad_clip != float('inf'):
+#                 clip_grad_norm_(aamp.master_params(optimizer), self.grad_clip)
+#             scheduler.step()
+#             optimizer.step()
+#             self.model.zero_grad()

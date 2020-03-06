@@ -84,12 +84,22 @@ def update_best_runtime_metric(tracker, metric_value, metric_name):
 
 def convert_dtype(dtype, obj):
     # The object should be a ``module`` or a ``tensor``
-    if dtype == "fp32":
-        return obj.float()
-    elif dtype == "fp64":
-        return obj.double()
+    if isinstance(obj, tuple):
+        obj, lengths = obj[0], obj[1]
+
+        if dtype == "fp32":
+            return obj.float(), lengths.float()
+        elif dtype == "fp64":
+            return obj.double(), lengths.double()
+        else:
+            raise NotImplementedError("dtype {} not supported.".format(dtype))
     else:
-        raise NotImplementedError("dtype {} not supported.".format(dtype))
+        if dtype == "fp32":
+            return obj.float()
+        elif dtype == "fp64":
+            return obj.double()
+        else:
+            raise NotImplementedError("dtype {} not supported.".format(dtype))
 
 
 def config_logging(logging_level="INFO", logging_file="/mlbench.log"):
@@ -279,6 +289,8 @@ def iterate_dataloader(
 ):
     for _, (data, target) in zip(maybe_range(max_batch_per_epoch), dataloader):
 
+        if isinstance(data, tuple) and target is None:
+            data, target = data
         data = convert_dtype(dtype, data)
         if transform_target_type:
             target = convert_dtype(dtype, target)
