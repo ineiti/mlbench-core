@@ -71,7 +71,7 @@ class WMT14Dataset(nlp_datasets.WMT14):
             include_lengths=True,
             min_len=0,
             max_len=None,
-            math_precision="fp32",
+            math_precision="fp16",
             max_size=None,
     ):
         """WMT14 Dataset.
@@ -92,7 +92,8 @@ class WMT14Dataset(nlp_datasets.WMT14):
         self.fields = _get_nmt_text(batch_first=batch_first,
                                     include_lengths=include_lengths)
         self.root = root
-
+        self.max_len = max_len
+        self.min_len = min_len
         if download:
             path = self.download(root)
         else:
@@ -110,7 +111,7 @@ class WMT14Dataset(nlp_datasets.WMT14):
         elif test:
             path = os.path.join(path, config.TEST_FNAME)
         else:
-            raise ValueError()
+            raise NotImplementedError()
 
         super(WMT14Dataset, self).__init__(
             path=path, fields=self.fields, exts=config.EXTS,
@@ -121,8 +122,8 @@ class WMT14Dataset(nlp_datasets.WMT14):
     def vocab_size(self):
         return self.fields["src"].vocab_size
 
-    def get_padding_idx(self):
-        return self.fields["src"].get_padding_idx()
+    def get_special_token_idx(self, token):
+        return self.fields["src"].get_special_token_indices()[token]
 
     def get_raw_item(self, idx):
         return super().__getitem__(idx)

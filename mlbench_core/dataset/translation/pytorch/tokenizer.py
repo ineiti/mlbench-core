@@ -42,7 +42,7 @@ class WMT14Tokenizer(torchtext.data.Field):
 
         """
         vocab = []
-        with open(vocab_fpath) as vfile:
+        with open(vocab_fpath, encoding="utf-8") as vfile:
             for line in vfile:
                 vocab.append([line.strip()])
 
@@ -75,6 +75,12 @@ class WMT14Tokenizer(torchtext.data.Field):
     def vocab_size(self):
         return len(self.vocab.itos)
 
-    def get_padding_idx(self):
+    def get_special_token_indices(self):
         vocab = self.vocab.itos
-        return vocab.index("<pad>")
+
+        indices = {"PAD": vocab.index(config.PAD_TOKEN),
+                   "BOS": vocab.index(config.BOS_TOKEN),
+                   "EOS": vocab.index(config.EOS_TOKEN),
+                   "UNK": vocab.index(config.UNK_TOKEN)}
+
+        return indices
