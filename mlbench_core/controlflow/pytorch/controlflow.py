@@ -243,6 +243,8 @@ def validation_round(
     transform_target_type=None,
     use_cuda=False,
     max_batch_per_epoch=None,
+    init_hidden=None,
+    package_hidden=None,
     tracker=None,
 ):
     """ Handles one full iteration of validation on the whole validation set.
@@ -259,6 +261,8 @@ def validation_round(
         use_cuda (bool): Whether to use GPU for training, default: `False`
         max_batch_per_epoch (int): Maximum number of batches tot rain for per epoch,
                                    default: `None` (all batches)
+        init_hidden (`func`): Function to initialize hidden state (for RNNs), default: `None`
+        package_hidden (`func`): Function to (re-)package hidden state (for RNNs), default: `None`
         tracker (`obj`:mlbench_core.utils.Tracker): Tracker object to use. Will be
                                                     created if not supplied
     """
@@ -278,6 +282,8 @@ def validation_round(
         transform_target_type,
         use_cuda,
         max_batch_per_epoch,
+        init_hidden=init_hidden,
+        package_hidden=package_hidden,
     )
     if tracker:
         tracker.validation_end()
