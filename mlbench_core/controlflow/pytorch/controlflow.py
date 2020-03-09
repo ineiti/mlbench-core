@@ -64,6 +64,9 @@ def train_round(
     transform_target_type=None,
     use_cuda=False,
     max_batch_per_epoch=None,
+    init_hidden=None,
+    package_hidden=None,
+    transform_parameters=None,
     tracker=None,
 ):
     """ Performs max_batch_per_epoch batches of training (or full trainset if
@@ -82,6 +85,10 @@ def train_round(
         use_cuda (bool): Whether to use GPU for training, default: `False`
         max_batch_per_epoch (int): Maximum number of batches tot rain for per epoch,
                                    default: `None` (all batches)
+        init_hidden (`func`): Function to initialize hidden state (for RNNs), default: `None`
+        package_hidden (`func`): Function to (re-)package hidden state (for RNNs), default: `None`
+        transform_parameters(`func`:model->None): Function to transform model parameters before backprop, e.g. Gradient Clipping,
+                                                  Default: `None`
         tracker (`obj`:mlbench_core.utils.Tracker): Tracker object to use.
     """
     model.train()
@@ -98,6 +105,10 @@ def train_round(
     if schedule_per == "epoch":
         scheduler.step()
 
+    hidden = None
+    if init_hidden:
+        hidden = init_hidden()
+
     for batch_idx, (data, target) in enumerate(data_iter):
         if tracker:
             tracker.batch_start()
@@ -105,13 +116,20 @@ def train_round(
         if schedule_per == "batch":
             scheduler.step()
 
+        if hidden:
+            hidden = package_hidden(hidden)
+
         # Clear gradients in the optimizer.
         optimizer.zero_grad()
         if tracker:
             tracker.record_batch_step("init")
 
         # Compute the output
-        output = model(data)
+        if hidden:
+            output, hidden = model(data, hidden)
+        else:
+            output = model(data)
+
         if tracker:
             tracker.record_batch_step("fwd_pass")
 
@@ -126,6 +144,8 @@ def train_round(
             tracker.record_batch_step("backprop")
 
         # Aggregate gradients/parameters from all workers and apply updates to model
+        if transform_parameters:
+            transform_parameters(model)
         optimizer.step()
         if tracker:
             tracker.record_batch_step("opt_step")
@@ -152,6 +172,8 @@ def _validate(
     transform_target_type=None,
     use_cuda=False,
     max_batch_per_epoch=None,
+    init_hidden=None,
+    package_hidden=None,
 ):
     """Evaluate the model on the test dataset.
 
@@ -165,6 +187,8 @@ def _validate(
         use_cuda (bool): Whether to use GPU for training, default: `False`
         max_batch_per_epoch (int): Maximum number of batches tot rain for per epoch,
                                    default: `None` (all batches)
+        init_hidden (`func`): Function to initialize hidden state (for RNNs), default: `None`
+        package_hidden (`func`): Function to (re-)package hidden state (for RNNs), default: `None`
         """
     # Initialize the accumulators for loss and metrics
     losses = AverageMeter()
@@ -177,9 +201,19 @@ def _validate(
             dataloader, dtype, max_batch_per_epoch, use_cuda, transform_target_type
         )
 
+        hidden = None
+        if init_hidden:
+            hidden = init_hidden()
+
         for data, target in data_iter:
+            if hidden:
+                hidden = package_hidden(hidden)
+
             # Inference
-            output = model(data)
+            if hidden:
+                output, hidden = model(data, hidden)
+            else:
+                output = model(data)
 
             # Compute loss
             loss = loss_function(output, target)
