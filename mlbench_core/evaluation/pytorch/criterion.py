@@ -52,14 +52,14 @@ class BCELossRegularized(_WeightedLoss):
     """
 
     def __init__(
-            self,
-            weight=None,
-            size_average=None,
-            reduce=None,
-            l1=0.0,
-            l2=0.0,
-            model=None,
-            reduction="elementwise_mean",
+        self,
+        weight=None,
+        size_average=None,
+        reduce=None,
+        l1=0.0,
+        l2=0.0,
+        model=None,
+        reduction="elementwise_mean",
     ):
         super(BCELossRegularized, self).__init__(
             weight, size_average, reduce, reduction
@@ -70,8 +70,7 @@ class BCELossRegularized(_WeightedLoss):
 
     def forward(self, input_, target):
         output = F.binary_cross_entropy(
-            input_, target.float(), weight=self.weight,
-            reduction=self.reduction
+            input_, target.float(), weight=self.weight, reduction=self.reduction
         )
         l2_loss = sum(param.norm(2) ** 2 for param in self.model.parameters())
         output += self.l2 / 2 * l2_loss
@@ -126,14 +125,14 @@ class MSELossRegularized(_WeightedLoss):
     """
 
     def __init__(
-            self,
-            weight=None,
-            size_average=None,
-            reduce=None,
-            l1=0.0,
-            l2=0.0,
-            model=None,
-            reduction="elementwise_mean",
+        self,
+        weight=None,
+        size_average=None,
+        reduce=None,
+        l1=0.0,
+        l2=0.0,
+        model=None,
+        reduction="elementwise_mean",
     ):
         super(MSELossRegularized, self).__init__(
             weight, size_average, reduce, reduction
@@ -171,7 +170,7 @@ class LabelSmoothing(nn.Module):
     def forward(self, x, target):
         logprobs = torch.nn.functional.log_softmax(x, dim=-1)
 
-        non_pad_mask = (target != self.padding_idx)
+        non_pad_mask = target != self.padding_idx
         nll_loss = -logprobs.gather(dim=-1, index=target.unsqueeze(1))
         nll_loss = nll_loss.squeeze(1)[non_pad_mask]
         smooth_loss = -logprobs.mean(dim=-1)[non_pad_mask]

@@ -3,7 +3,6 @@ from mlbench_core.dataset.translation.pytorch import config
 
 
 class WMT14Tokenizer(torchtext.data.Field):
-
     def __init__(self, language, tokenizer, separator="@@", **kwargs):
         """ Tokenizer Class for WMT14 that uses the whole vocabulary
 
@@ -29,7 +28,7 @@ class WMT14Tokenizer(torchtext.data.Field):
         vocab_size = len(vocab)
         padded_vocab_size = (vocab_size + pad - 1) // pad * pad
         for i in range(0, padded_vocab_size - vocab_size):
-            token = f'madeupword{i:04d}'
+            token = f"madeupword{i:04d}"
             vocab.append(token)
         assert len(vocab) % pad == 0
 
@@ -78,9 +77,11 @@ class WMT14Tokenizer(torchtext.data.Field):
     def get_special_token_indices(self):
         vocab = self.vocab.itos
 
-        indices = {"PAD": vocab.index(config.PAD_TOKEN),
-                   "BOS": vocab.index(config.BOS_TOKEN),
-                   "EOS": vocab.index(config.EOS_TOKEN),
-                   "UNK": vocab.index(config.UNK_TOKEN)}
+        indices = {
+            "PAD": vocab.index(config.PAD_TOKEN),
+            "BOS": vocab.index(config.BOS_TOKEN),
+            "EOS": vocab.index(config.EOS_TOKEN),
+            "UNK": vocab.index(config.UNK_TOKEN),
+        }
 
         return indices

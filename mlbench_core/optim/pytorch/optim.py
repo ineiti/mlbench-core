@@ -28,14 +28,12 @@ class SparsifiedSGD(Optimizer):
 
     """
 
-    def __init__(self, params, lr=required, weight_decay=0,
-                 sparse_grad_size=10):
+    def __init__(self, params, lr=required, weight_decay=0, sparse_grad_size=10):
 
         if lr is not required and lr < 0.0:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if weight_decay < 0.0:
-            raise ValueError(
-                "Invalid weight_decay value: {}".format(weight_decay))
+            raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
 
         defaults = dict(lr=lr, weight_decay=weight_decay)
 
@@ -149,9 +147,9 @@ class SparsifiedSGD(Optimizer):
         sparse_tensor = torch.zeros(1, output_size)
         sparse_tensor[0, 0] = begin_index
         sparse_tensor[0, 1:] = self.state[param]["memory"][
-                               0, begin_index: end_index + 1
-                               ]
-        self.state[param]["memory"][0, begin_index: end_index + 1] = 0
+            0, begin_index : end_index + 1
+        ]
+        self.state[param]["memory"][0, begin_index : end_index + 1] = 0
 
         return sparse_tensor
 
@@ -167,14 +165,12 @@ class SparsifiedSGD(Optimizer):
             for param in group["params"]:
                 tau = param.data.size()[1] / sparse_vector_size
                 rho = (
-                        6
-                        * ((t + tau) ** 2)
-                        / ((1 + t) * (
-                        6 * (tau ** 2) + t + 6 * tau * t + 2 * (t ** 2)))
+                    6
+                    * ((t + tau) ** 2)
+                    / ((1 + t) * (6 * (tau ** 2) + t + 6 * tau * t + 2 * (t ** 2)))
                 )
                 self.state[param]["estimated_w"] = (
-                        self.state[param]["estimated_w"] * (
-                        1 - rho) + param.data * rho
+                    self.state[param]["estimated_w"] * (1 - rho) + param.data * rho
                 )
 
     def get_estimated_weights(self):
@@ -205,13 +201,13 @@ class CentralizedSparsifiedSGD(SparsifiedSGD):
     """
 
     def __init__(
-            self,
-            params,
-            lr=required,
-            weight_decay=0,
-            sparse_grad_size=10,
-            random_sparse=False,
-            average_models=True,
+        self,
+        params,
+        lr=required,
+        weight_decay=0,
+        sparse_grad_size=10,
+        random_sparse=False,
+        average_models=True,
     ):
         self.average_models = average_models
         self.world_size = dist.get_world_size()
@@ -243,8 +239,7 @@ class CentralizedSparsifiedSGD(SparsifiedSGD):
                 sparse_tensor = self.sparsify_gradients(p, lr)
                 # Aggregate the gradients
                 gathered_list = [
-                    torch.zeros_like(sparse_tensor) for _ in
-                    range(self.world_size)
+                    torch.zeros_like(sparse_tensor) for _ in range(self.world_size)
                 ]
                 dist.all_gather(gathered_list, sparse_tensor)
                 p.grad.data = torch.zeros_like(p.grad.data)
@@ -252,16 +247,15 @@ class CentralizedSparsifiedSGD(SparsifiedSGD):
                 if self.random_sparse:
                     for grad_tensor in gathered_list:
                         for index in range(grad_tensor.size()[1]):
-                            p.grad.data[0, int(grad_tensor[0, index])] += \
-                                grad_tensor[
-                                    1, index
-                                ]
+                            p.grad.data[0, int(grad_tensor[0, index])] += grad_tensor[
+                                1, index
+                            ]
                 else:
                     for grad_tensor in gathered_list:
                         tensor_size = grad_tensor.size()[1]
                         begin = int(grad_tensor[0, 0])
                         p.grad.data[
-                        0, begin: (begin + tensor_size - 1)
+                            0, begin : (begin + tensor_size - 1)
                         ] += grad_tensor[0, 1:]
 
                 if self.average_models:
@@ -297,16 +291,16 @@ class DecentralizedSGD(SGD):
     """
 
     def __init__(
-            self,
-            rank,
-            neighbors,
-            model,
-            lr=required,
-            momentum=0,
-            dampening=0,
-            weight_decay=0,
-            nesterov=False,
-            average_models=True,
+        self,
+        rank,
+        neighbors,
+        model,
+        lr=required,
+        momentum=0,
+        dampening=0,
+        weight_decay=0,
+        nesterov=False,
+        average_models=True,
     ):
         super(DecentralizedSGD, self).__init__(
             model.parameters(), lr, momentum, dampening, weight_decay, nesterov
@@ -315,8 +309,7 @@ class DecentralizedSGD(SGD):
         if average_models:
             self.agg_mode = "avg"
         else:
-            raise NotImplementedError(
-                "Only average model is supported right now.")
+            raise NotImplementedError("Only average model is supported right now.")
 
         self.model = model
         self.agg = DecentralizedAggregation(rank, neighbors).agg_model
@@ -352,15 +345,15 @@ class CentralizedSGD(SGD):
     """
 
     def __init__(
-            self,
-            world_size,
-            model,
-            lr=required,
-            momentum=0,
-            dampening=0,
-            weight_decay=0,
-            nesterov=False,
-            average_models=True,
+        self,
+        world_size,
+        model,
+        lr=required,
+        momentum=0,
+        dampening=0,
+        weight_decay=0,
+        nesterov=False,
+        average_models=True,
     ):
         super(CentralizedSGD, self).__init__(
             model.parameters(), lr, momentum, dampening, weight_decay, nesterov
@@ -368,8 +361,7 @@ class CentralizedSGD(SGD):
         if average_models:
             self.agg_mode = "avg"
         else:
-            raise NotImplementedError(
-                "Only average model is supported right now.")
+            raise NotImplementedError("Only average model is supported right now.")
 
         self.model = model
         self.agg = AllReduceAggregation(world_size=world_size).agg_grad
@@ -428,8 +420,7 @@ class SignSGD(SGD):
                 if momentum != 0:
                     param_state = self.state[p]
                     if "momentum_buffer" not in param_state:
-                        buf = param_state[
-                            "momentum_buffer"] = torch.zeros_like(p.data)
+                        buf = param_state["momentum_buffer"] = torch.zeros_like(p.data)
                         buf.mul_(momentum).add_(d_p)
                     else:
                         buf = param_state["momentum_buffer"]
@@ -520,10 +511,9 @@ class FP32Optimizer:
         :param optimizer: optimizer
         :param update: if True executes weight update
         """
-        if self.grad_clip != float('inf'):
+        if self.grad_clip != float("inf"):
             clip_grad_norm_(self.params, self.grad_clip)
         self.optimizer.step()
-
 
     def backward_loss(self, loss):
         loss.backward()
@@ -563,9 +553,16 @@ class FP16Optimizer:
         for param, new_param in zip(params, new_params):
             param.data.copy_(new_param.data)
 
-    def __init__(self, model, optimizer, grad_clip=float('inf'),
-                 loss_scale=8192,
-                 dls_downscale=2, dls_upscale=2, dls_upscale_interval=128):
+    def __init__(
+        self,
+        model,
+        optimizer,
+        grad_clip=float("inf"),
+        loss_scale=8192,
+        dls_downscale=2,
+        dls_upscale=2,
+        dls_upscale_interval=128,
+    ):
         """
         Constructor for the Fp16Optimizer.
 
@@ -602,8 +599,9 @@ class FP16Optimizer:
         model.half()
         self.model = model
         self.model.zero_grad()
-        self.fp32_params = [param.to(torch.float32).detach()
-                            for param in model.parameters()]
+        self.fp32_params = [
+            param.to(torch.float32).detach() for param in model.parameters()
+        ]
 
         for param in self.fp32_params:
             param.requires_grad = True
@@ -635,8 +633,7 @@ class FP16Optimizer:
 
         if math.isfinite(norm):
             self.optimizer.step()
-            self.set_weights(self.model.parameters(),
-                             self.fp32_params)
+            self.set_weights(self.model.parameters(), self.fp32_params)
             self.since_last_invalid += 1
         else:
             self.loss_scale /= self.dls_downscale
@@ -658,8 +655,14 @@ class AMPOptimizer:
     update.
     """
 
-    def __init__(self, model, optimizer, grad_clip=None, loss_scale=8192,
-                 dls_upscale_interval=128):
+    def __init__(
+        self,
+        model,
+        optimizer,
+        grad_clip=None,
+        loss_scale=8192,
+        dls_upscale_interval=128,
+    ):
         """
         Constructor for the AMPOptimizer
 
@@ -686,7 +689,7 @@ class AMPOptimizer:
         :param optimizer: optimizer
         :param update: if True executes weight update
         """
-        if self.grad_clip != float('inf'):
+        if self.grad_clip != float("inf"):
             clip_grad_norm_(amp.master_params(self.optimizer), self.grad_clip)
         self.optimizer.step()
 

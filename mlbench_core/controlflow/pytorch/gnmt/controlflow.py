@@ -1,23 +1,74 @@
 import logging
-import math
 
 import torch
 import torch.optim
 import torch.utils.data
-from mlbench_core.controlflow.pytorch.controlflow import \
-    _record_train_batch_stats
+# from mlbench_core.controlflow.pytorch.controlflow import _record_train_batch_stats
 from mlbench_core.utils import AverageMeter
+from mlbench_core.utils.pytorch.distributed import global_average
+
+logger = logging.getLogger("mlbench")
+LOG_EVERY_N_BATCHES = 25
+
+
+def _record_train_batch_stats(
+        batch_idx, loss, translated, target, metrics, tracker, num_batches_per_device_train
+):
+    r"""Record the stats in a training batch.
+
+    Args:
+        batch_idx (int): The id of the current batch
+        loss (float): The loss of the batch
+        translated (:obj:`torch.Tensor`): The model output
+        target (:obj:`torch.Tensor`): The labels for the current batch
+        metrics (list): List of metrics to track
+        tracker (`obj`:mlbench_core.utils.Tracker): Tracker object to use.
+        num_batches_per_device_train (int): Number of batches per train epoch
+    """
+    progress = batch_idx / num_batches_per_device_train
+    progress += tracker.current_epoch
+
+    log_to_api = (
+            batch_idx % LOG_EVERY_N_BATCHES == 0
+            or batch_idx == num_batches_per_device_train
+    )
+
+    if tracker:
+        tracker.record_loss(loss, len(translated), log_to_api=log_to_api)
+
+    # Compute metrics for one batch
+    for metric in metrics:
+        metric_value = metric(loss, translated, target).item()
+
+        if tracker:
+            tracker.record_metric(
+                metric, metric_value, len(translated), log_to_api=log_to_api
+            )
+
+    status = "Epoch {:5.2f} Batch {:4}: ".format(progress, batch_idx)
+
+    logger.info(status + str(tracker))
 
 
 class GNMTTrainer:
-
-    def __init__(self, model, criterion, fp_optimizer, scheduler,
-                 schedule_per, tracker, metrics, target, iter_size):
+    def __init__(
+            self,
+            model,
+            criterion,
+            fp_optimizer,
+            scheduler,
+            translator,
+            rank,
+            schedule_per,
+            tracker,
+            metrics,
+            iter_size,
+    ):
         self.model = model
         self.batch_first = model.batch_first
         self.criterion = criterion
         self.epoch = 0
-
+        self.rank = rank
         # Optimizers & Scheduler
         self.fp_optimizer = fp_optimizer
 
@@ -25,8 +76,8 @@ class GNMTTrainer:
         self.scheduler = scheduler
         self.device = next(model.parameters()).device
 
+        self.translator = translator
         self.metrics = metrics
-        self.target = target
         self.iter_size = iter_size
 
         self.tracker = tracker
@@ -45,14 +96,16 @@ class GNMTTrainer:
 
         return output
 
+    def set_tracker(self, tracker):
+        self.tracker = tracker
+
     def compute_loss(self, src, tgt, output):
         src, src_length = src
         tgt, tgt_length = tgt
         tgt = tgt.to(self.device)
         src_length = src_length.to(self.device)
 
-        num_toks = {'tgt': int(sum(tgt_length - 1)),
-                    'src': int(sum(src_length))}
+        num_toks = {"tgt": int(sum(tgt_length - 1)), "src": int(sum(src_length))}
 
         if self.batch_first:
             tgt_labels = tgt[:, 1:]
@@ -62,34 +115,37 @@ class GNMTTrainer:
             tgt_labels = tgt[1:]
             T, B = output.size(0), output.size(1)
 
-        loss = self.criterion(output.view(T * B, -1),
-                              tgt_labels.contiguous().view(-1))
+        loss = self.criterion(output.view(T * B, -1), tgt_labels.contiguous().view(-1))
 
         loss_per_batch = loss.item()
-        loss /= (B * self.iter_size)
+        loss /= B * self.iter_size
 
-        loss_per_token = loss_per_batch / num_toks['tgt']
+        loss_per_token = loss_per_batch / num_toks["tgt"]
         loss_per_sentence = loss_per_batch / B
 
         return loss, loss_per_token, loss_per_sentence, num_toks
 
-    def feed_data(self, data_loader, num_batches_per_device_train,
-                  training=True):
+    def feed_data(self, data_loader):
         """
         Runs training or validation on batches from data_loader.
-
-        :param data_loader: data loader
-        :param training: if True runs training else runs validation
         """
 
+        if self.tracker:
+            self.tracker.train()
+
         losses_per_token = AverageMeter()
+
+        num_batches_per_device_train = len(data_loader)
+
+        if self.schedule_per == "epoch":
+            self.scheduler.step()
 
         for batch_idx, data in enumerate(data_loader):
 
             if self.tracker:
                 self.tracker.batch_start()
 
-            if self.tracker and self.schedule_per == "batch":
+            if self.schedule_per == "batch":
                 self.scheduler.step()
 
             # Clear gradients in the optimizer.
@@ -106,7 +162,7 @@ class GNMTTrainer:
             # Compute the loss
             stats = self.compute_loss(src, tgt, output)
             loss, loss_per_token, loss_per_sentence, num_toks = stats
-            losses_per_token.update(loss_per_token, num_toks['tgt'])
+            losses_per_token.update(loss_per_token, num_toks["tgt"])
 
             if self.tracker:
                 self.tracker.record_batch_step("comp_loss")
@@ -117,25 +173,28 @@ class GNMTTrainer:
             if self.tracker:
                 self.tracker.record_batch_step("backprop")
 
-            if training:
-                self.fp_optimizer.step()
-                if self.tracker:
-                    self.tracker.record_batch_step("opt_step")
-
+            # Opt step
+            self.fp_optimizer.step()
             if self.tracker:
+                self.tracker.record_batch_step("opt_step")
+
                 self.tracker.batch_end()
 
-                _record_train_batch_stats(
-                    batch_idx,
-                    loss.item(),
-                    output,
-                    self.target,
-                    self.metrics,
-                    self.tracker,
-                    num_batches_per_device_train,
-                )
+            # Get translated sequence and record train stats
+            translated, targets = self.translator.translate(src, tgt)
 
-    def optimize(self, data_loader, num_batches_per_device_train):
+            _record_train_batch_stats(
+                batch_idx,
+                losses_per_token.avg,
+                translated,
+                targets,
+                self.metrics,
+                self.tracker,
+                num_batches_per_device_train,
+            )
+        return losses_per_token.avg
+
+    def train_round(self, data_loader):
         """
         Sets model in training mode, preallocates memory and runs training on
         data provided by data_loader.
@@ -148,112 +207,100 @@ class GNMTTrainer:
         torch.set_grad_enabled(True)
         self.model.train()
 
-        self.feed_data(data_loader, num_batches_per_device_train,
-                       training=True)
+        output = self.feed_data(data_loader)
+        return output
 
-    def evaluate(self, data_loader, num_batches_per_device_train):
+    def validate(self, loader):
+        losses = AverageMeter()
+
+        # Reset metrics
+        for metric in self.metrics:
+            metric.reset()
+
+        with torch.no_grad():
+            for data in loader:
+
+                # Inference
+                src, trg = data.src, data.trg
+                output = self.compute_model_output(src, trg)
+
+                # Compute loss
+                stats = self.compute_loss(src, trg, output)
+                loss, loss_per_token, loss_per_sentence, num_toks = stats
+
+                # Update loss
+                losses.update(loss_per_token, num_toks["tgt"])
+
+                # Update metrics
+                translated, targets = self.translator.translate(src, trg)
+                for metric in self.metrics:
+                    metric_value = metric(loss, translated, targets)
+                    size = src[0].shape[0] if self.batch_first else src[0].shape[1]
+                    print(metric_value)
+                    metric.update(metric_value, size)
+
+        metrics_averages = {metric: metric.average().item() for metric in self.metrics}
+        loss_average = global_average(losses.sum, losses.count).item()
+        return metrics_averages, loss_average
+
+    def validation_round(self, data_loader):
         """
         Sets model in eval mode, disables gradients, preallocates memory and
         runs validation on data provided by data_loader.
 
         :param data_loader: data loader
         """
+        tracker = self.tracker
+
         torch.set_grad_enabled(False)
         self.model.eval()
-        self.feed_data(data_loader, num_batches_per_device_train,
-                       training=False)
 
+        # Set tracker in validation mode
+        if tracker:
+            tracker.validation()
+            tracker.validation_start()
 
-def perhaps_convert_float(param, total):
-    if isinstance(param, float):
-        param = int(param * total)
-    return param
+        # Gather metrics and loss average
+        metrics_values, loss = self.validate(data_loader)
+        if tracker:
+            tracker.validation_end()
 
+        if len(metrics_values) > 0:
+            # Save metrics
+            if tracker:
+                for metric, value in metrics_values.items():
+                    tracker.record_metric(metric, value, log_to_api=True)
 
-class WarmupMultiStepLR(torch.optim.lr_scheduler._LRScheduler):
-    """
-    Learning rate scheduler with exponential warmup and step decay.
-    """
+                    global_metric_value = global_average(value, 1).item()
 
-    def __init__(self, optimizer, iterations, warmup_steps=0,
-                 remain_steps=1.0, decay_interval=None, decay_steps=4,
-                 decay_factor=0.5, last_epoch=-1):
-        """
-        Constructor of WarmupMultiStepLR.
+                    if self.rank == 0:
+                        tracker.record_stat(
+                            "global_{}".format(metric.name),
+                            global_metric_value,
+                            log_to_api=True,
+                        )
 
-        Parameters: warmup_steps, remain_steps and decay_interval accept both
-        integers and floats as an input. Integer input is interpreted as
-        absolute index of iteration, float input is interpreted as a fraction
-        of total training iterations (epochs * steps_per_epoch).
-
-        If decay_interval is None then the decay will happen at regulary spaced
-        intervals ('decay_steps' decays between iteration indices
-        'remain_steps' and 'iterations').
-
-        :param optimizer: instance of optimizer
-        :param iterations: total number of training iterations
-        :param warmup_steps: number of warmup iterations
-        :param remain_steps: start decay at 'remain_steps' iteration
-        :param decay_interval: interval between LR decay steps
-        :param decay_steps: max number of decay steps
-        :param decay_factor: decay factor
-        :param last_epoch: the index of last iteration
-        """
-
-        # iterations before learning rate reaches base LR
-        self.warmup_steps = perhaps_convert_float(warmup_steps, iterations)
-        logging.info(f'Scheduler warmup steps: {self.warmup_steps}')
-
-        # iteration at which decay starts
-        self.remain_steps = perhaps_convert_float(remain_steps, iterations)
-        logging.info(f'Scheduler remain steps: {self.remain_steps}')
-
-        # number of steps between each decay
-        if decay_interval is None:
-            # decay at regulary spaced intervals
-            decay_iterations = iterations - self.remain_steps
-            self.decay_interval = decay_iterations // (decay_steps)
-            self.decay_interval = max(self.decay_interval, 1)
+            #
+            if self.rank == 0 and tracker:
+                logger.info(
+                    "{} for rank {}:(best epoch {}, current epoch {}): {:.3f}".format(
+                        tracker.primary_metric.name,
+                        tracker.rank,
+                        tracker.best_epoch,
+                        tracker.current_epoch,
+                        tracker.best_metric_value,
+                    )
+                )
         else:
-            self.decay_interval = perhaps_convert_float(decay_interval,
-                                                        iterations)
-        logging.info(f'Scheduler decay interval: {self.decay_interval}')
+            if self.rank == 0:
+                logger.info("Validation loss={:.3f}".format(loss))
 
-        # multiplicative decay factor
-        self.decay_factor = decay_factor
-        logging.info(f'Scheduler decay factor: {self.decay_factor}')
+        if tracker:
+            tracker.record_loss(loss, log_to_api=True)
 
-        # max number of decay steps
-        self.decay_steps = decay_steps
-        logging.info(f'Scheduler max decay steps: {self.decay_steps}')
+            global_loss = global_average(loss, 1).item()
 
-        if self.warmup_steps > self.remain_steps:
-            logging.warn(f'warmup_steps should not be larger than '
-                         f'remain_steps, setting warmup_steps=remain_steps')
-            self.warmup_steps = self.remain_steps
+            if self.rank == 0:
+                tracker.record_stat("global_loss", global_loss, log_to_api=True)
 
-        super(WarmupMultiStepLR, self).__init__(optimizer, last_epoch)
-
-    def get_lr(self):
-        if self.last_epoch <= self.warmup_steps:
-            # exponential lr warmup
-            if self.warmup_steps != 0:
-                warmup_factor = math.exp(math.log(0.01) / self.warmup_steps)
-            else:
-                warmup_factor = 1.0
-            inv_decay = warmup_factor ** (self.warmup_steps - self.last_epoch)
-            lr = [base_lr * inv_decay for base_lr in self.base_lrs]
-
-        elif self.last_epoch >= self.remain_steps:
-            # step decay
-            decay_iter = self.last_epoch - self.remain_steps
-            num_decay_steps = decay_iter // self.decay_interval + 1
-            num_decay_steps = min(num_decay_steps, self.decay_steps)
-            lr = [
-                base_lr * (self.decay_factor ** num_decay_steps)
-                for base_lr in self.base_lrs
-            ]
-        else:
-            # base lr
-            lr = [base_lr for base_lr in self.base_lrs]
-        return lr
+        return tracker.is_best() if tracker else False

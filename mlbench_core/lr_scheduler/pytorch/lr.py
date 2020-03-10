@@ -12,7 +12,7 @@ def const(optimizer):
 
 
 def triangular_learning_rates(
-        optimizer, base_lr, max_lr, cycle_length, scale_fn, extra, mode
+    optimizer, base_lr, max_lr, cycle_length, scale_fn, extra, mode
 ):
     """ Linearily Scale Learning Rate
 
@@ -65,7 +65,7 @@ def triangular_learning_rates(
 
 
 def cyclical_learning_rates(
-        optimizer, mode, gamma, cycle_length, base_lr, max_lr, extra_epochs
+    optimizer, mode, gamma, cycle_length, base_lr, max_lr, extra_epochs
 ):
     """ Cyclically Scale Learning Rate
 
@@ -122,14 +122,14 @@ def cyclical_learning_rates(
 
 
 def multistep_learning_rates_with_warmup(
-        optimizer,
-        world_size,
-        lr,
-        gamma,
-        milestones,
-        warmup_duration=None,
-        warmup_lr=None,
-        warmup_linear_scaling=False,
+    optimizer,
+    world_size,
+    lr,
+    gamma,
+    milestones,
+    warmup_duration=None,
+    warmup_lr=None,
+    warmup_linear_scaling=False,
 ):
     """ Multistep Learning Rate Schedule with warmup
 
@@ -215,15 +215,15 @@ class MultistepLearningRatesWithWarmup(LambdaLR):
     """
 
     def __init__(
-            self,
-            optimizer,
-            world_size,
-            gamma,
-            milestones,
-            lr,
-            warmup_duration,
-            warmup_linear_scaling=True,
-            warmup_init_lr=None,
+        self,
+        optimizer,
+        world_size,
+        gamma,
+        milestones,
+        lr,
+        warmup_duration,
+        warmup_linear_scaling=True,
+        warmup_init_lr=None,
     ):
         if list(milestones) != sorted(milestones):
             raise ValueError(
@@ -355,9 +355,16 @@ class ExponentialWarmupMultiStepLR(LambdaLR):
     Learning rate scheduler with exponential warmup and step decay.
     """
 
-    def __init__(self, optimizer, iterations, warmup_steps=0,
-                 remain_steps=1.0, decay_interval=None, decay_steps=4,
-                 decay_factor=0.5):
+    def __init__(
+        self,
+        optimizer,
+        iterations,
+        warmup_steps=0,
+        remain_steps=1.0,
+        decay_interval=None,
+        decay_steps=4,
+        decay_factor=0.5,
+    ):
         """
         Constructor of Exponential WarmupMultiStepLR.
 
@@ -393,8 +400,7 @@ class ExponentialWarmupMultiStepLR(LambdaLR):
             self.decay_interval = decay_iterations // decay_steps
             self.decay_interval = max(self.decay_interval, 1)
         else:
-            self.decay_interval = perhaps_convert_float(decay_interval,
-                                                        iterations)
+            self.decay_interval = perhaps_convert_float(decay_interval, iterations)
 
         # multiplicative decay factor
         self.decay_factor = decay_factor
