@@ -567,6 +567,7 @@ def create_gcloud(
                 "source": {
                     "type": "git",
                     "location": "https://github.com/mlbench/mlbench-helm",
+                    "reference": "RNN-Language-translation",
                 },
             }
         )
