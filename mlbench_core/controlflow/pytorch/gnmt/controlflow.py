@@ -3,6 +3,7 @@ import logging
 import torch
 import torch.optim
 import torch.utils.data
+
 # from mlbench_core.controlflow.pytorch.controlflow import _record_train_batch_stats
 from mlbench_core.utils import AverageMeter
 from mlbench_core.utils.pytorch.distributed import global_average
@@ -12,7 +13,7 @@ LOG_EVERY_N_BATCHES = 25
 
 
 def _record_train_batch_stats(
-        batch_idx, loss, translated, target, metrics, tracker, num_batches_per_device_train
+    batch_idx, loss, translated, target, metrics, tracker, num_batches_per_device_train
 ):
     r"""Record the stats in a training batch.
 
@@ -29,8 +30,8 @@ def _record_train_batch_stats(
     progress += tracker.current_epoch
 
     log_to_api = (
-            batch_idx % LOG_EVERY_N_BATCHES == 0
-            or batch_idx == num_batches_per_device_train
+        batch_idx % LOG_EVERY_N_BATCHES == 0
+        or batch_idx == num_batches_per_device_train
     )
 
     if tracker:
@@ -52,17 +53,17 @@ def _record_train_batch_stats(
 
 class GNMTTrainer:
     def __init__(
-            self,
-            model,
-            criterion,
-            fp_optimizer,
-            scheduler,
-            translator,
-            rank,
-            schedule_per,
-            tracker,
-            metrics,
-            iter_size,
+        self,
+        model,
+        criterion,
+        fp_optimizer,
+        scheduler,
+        translator,
+        rank,
+        schedule_per,
+        tracker,
+        metrics,
+        iter_size,
     ):
         self.model = model
         self.batch_first = model.batch_first
