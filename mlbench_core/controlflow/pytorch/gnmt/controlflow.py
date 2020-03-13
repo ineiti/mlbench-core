@@ -4,7 +4,6 @@ import torch
 import torch.optim
 import torch.utils.data
 
-# from mlbench_core.controlflow.pytorch.controlflow import _record_train_batch_stats
 from mlbench_core.utils import AverageMeter
 from mlbench_core.utils.pytorch.distributed import global_average
 
@@ -13,7 +12,7 @@ LOG_EVERY_N_BATCHES = 25
 
 
 def _record_train_batch_stats(
-    batch_idx, loss, translated, target, metrics, tracker, num_batches_per_device_train
+    batch_idx, loss, batch_size, target, metrics, tracker, num_batches_per_device_train
 ):
     r"""Record the stats in a training batch.
 
@@ -35,16 +34,16 @@ def _record_train_batch_stats(
     )
 
     if tracker:
-        tracker.record_loss(loss, len(translated), log_to_api=log_to_api)
+        tracker.record_loss(loss, batch_size, log_to_api=log_to_api)
 
     # Compute metrics for one batch
-    for metric in metrics:
-        metric_value = metric(loss, translated, target).item()
-
-        if tracker:
-            tracker.record_metric(
-                metric, metric_value, len(translated), log_to_api=log_to_api
-            )
+    # for metric in metrics:
+    #     metric_value = metric(loss, translated, target).item()
+    #
+    #     if tracker:
+    #         tracker.record_metric(
+    #             metric, metric_value, len(translated), log_to_api=log_to_api
+    #         )
 
     status = "Epoch {:5.2f} Batch {:4}: ".format(progress, batch_idx)
 
@@ -167,7 +166,6 @@ class GNMTTrainer:
 
             if self.tracker:
                 self.tracker.record_batch_step("comp_loss")
-            print(batch_idx, losses_per_token.avg)
 
             # Backprop
             self.fp_optimizer.backward_loss(loss)
@@ -182,14 +180,18 @@ class GNMTTrainer:
                 self.tracker.batch_end()
 
             # Get translated sequence and record train stats
-            translated, targets = self.translator.translate(src, tgt)
+            #translated, targets = self.translator.translate(src, tgt)
+            if self.batch_first:
+                batch_size = output.size(0)
+            else:
+                batch_size = output.size(1)
 
             _record_train_batch_stats(
                 batch_idx,
-                losses_per_token.avg,
-                translated,
-                targets,
-                self.metrics,
+                loss_per_token,
+                batch_size,
+                None,
+                [],
                 self.tracker,
                 num_batches_per_device_train,
             )
