@@ -169,7 +169,7 @@ class WMT14Tokenizer:
         Returns:
             list representing tokenized sentence
         """
-        line = line.strip().split()
+        # line = line.strip().split()
         entry = [self.tok2idx[i] for i in line]
         entry = [config.BOS] + entry + [config.EOS]
         return entry
@@ -212,4 +212,4 @@ class WMT14Tokenizer:
         return output
 
     def preprocess(self, x):
-        return x
+        return x.strip().split()

@@ -670,14 +670,13 @@ class AMPOptimizer:
         :param grad_clip: coefficient for gradient clipping, max L2 norm of the
             gradients
         """
-        # self.initialize_model(model)
         self.grad_clip = grad_clip
         self.optimizer = optimizer
         loss_scaler = amp._amp_state.loss_scalers[0]
         loss_scaler._loss_scale = loss_scale
         loss_scaler._scale_seq_len = dls_upscale_interval
 
-    def loss_backward(self, loss):
+    def backward_loss(self, loss):
         with amp.scale_loss(loss, self.optimizer) as scaled_loss:
             scaled_loss.backward()
 

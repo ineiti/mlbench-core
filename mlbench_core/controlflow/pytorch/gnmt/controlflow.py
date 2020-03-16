@@ -12,16 +12,13 @@ LOG_EVERY_N_BATCHES = 25
 
 
 def _record_train_batch_stats(
-    batch_idx, loss, batch_size, target, metrics, tracker, num_batches_per_device_train
+    batch_idx, loss, batch_size, tracker, num_batches_per_device_train
 ):
     r"""Record the stats in a training batch.
 
     Args:
         batch_idx (int): The id of the current batch
         loss (float): The loss of the batch
-        translated (:obj:`torch.Tensor`): The model output
-        target (:obj:`torch.Tensor`): The labels for the current batch
-        metrics (list): List of metrics to track
         tracker (`obj`:mlbench_core.utils.Tracker): Tracker object to use.
         num_batches_per_device_train (int): Number of batches per train epoch
     """
@@ -35,16 +32,6 @@ def _record_train_batch_stats(
 
     if tracker:
         tracker.record_loss(loss, batch_size, log_to_api=log_to_api)
-
-    # Compute metrics for one batch
-    # for metric in metrics:
-    #     metric_value = metric(loss, translated, target).item()
-    #
-    #     if tracker:
-    #         tracker.record_metric(
-    #             metric, metric_value, len(translated), log_to_api=log_to_api
-    #         )
-
     status = "Epoch {:5.2f} Batch {:4}: ".format(progress, batch_idx)
 
     logger.info(status + str(tracker))
@@ -141,61 +128,74 @@ class GNMTTrainer:
             self.scheduler.step()
 
         for batch_idx, data in enumerate(data_loader):
-
-            if self.tracker:
-                self.tracker.batch_start()
-
-            if self.schedule_per == "batch":
-                self.scheduler.step()
-
-            # Clear gradients in the optimizer.
-            self.fp_optimizer.zero_grad()
-            if self.tracker:
-                self.tracker.record_batch_step("init")
-
-            # Compute the output
-            src, tgt = data.src, data.trg
-            output = self.compute_model_output(src, tgt)
-            if self.tracker:
-                self.tracker.record_batch_step("fwd_pass")
-
-            # Compute the loss
-            stats = self.compute_loss(src, tgt, output)
-            loss, loss_per_token, loss_per_sentence, num_toks = stats
-            losses_per_token.update(loss_per_token, num_toks["tgt"])
-
-            if self.tracker:
-                self.tracker.record_batch_step("comp_loss")
-
-            # Backprop
-            self.fp_optimizer.backward_loss(loss)
-            if self.tracker:
-                self.tracker.record_batch_step("backprop")
-
-            # Opt step
-            self.fp_optimizer.step()
-            if self.tracker:
-                self.tracker.record_batch_step("opt_step")
-
-                self.tracker.batch_end()
-
-            # Get translated sequence and record train stats
-            #translated, targets = self.translator.translate(src, tgt)
-            if self.batch_first:
-                batch_size = output.size(0)
-            else:
-                batch_size = output.size(1)
-
-            _record_train_batch_stats(
-                batch_idx,
-                loss_per_token,
-                batch_size,
-                None,
-                [],
-                self.tracker,
-                num_batches_per_device_train,
+            loss_per_token, num_toks = self.optimize(
+                batch_idx, data, num_batches_per_device_train
             )
+            losses_per_token.update(loss_per_token, num_toks["tgt"])
         return losses_per_token.avg
+
+    def optimize(self, batch_idx, data, num_batches_per_device_train):
+
+        if self.tracker:
+            self.tracker.batch_start()
+
+        if self.schedule_per == "batch":
+            self.scheduler.step()
+
+        # Clear gradients in the optimizer.
+        self.fp_optimizer.zero_grad()
+        if self.tracker:
+            self.tracker.record_batch_step("init")
+
+        # Compute the output
+        src, tgt = data.src, data.trg
+        output = self.compute_model_output(src, tgt)
+
+        if self.tracker:
+            self.tracker.record_batch_step("fwd_pass")
+
+        # Compute the loss
+        stats = self.compute_loss(src, tgt, output)
+        loss, loss_per_token, loss_per_sentence, num_toks = stats
+        #
+
+        if self.tracker:
+            self.tracker.record_batch_step("comp_loss")
+
+        # Backprop
+        self.fp_optimizer.backward_loss(loss)
+
+        if self.tracker:
+            self.tracker.record_batch_step("backprop")
+
+        # Opt step
+        self.fp_optimizer.step()
+
+        if self.tracker:
+            self.tracker.record_batch_step("opt_step")
+
+            self.tracker.batch_end()
+
+        # Get translated sequence and record train stats
+        # translated, targets = self.translator.translate(src, tgt)
+
+        if self.batch_first:
+            batch_size = output.size(0)
+        else:
+            batch_size = output.size(1)
+
+        _record_train_batch_stats(
+            batch_idx=batch_idx,
+            loss=loss_per_token,
+            batch_size=batch_size,
+            tracker=self.tracker,
+            num_batches_per_device_train=num_batches_per_device_train,
+        )
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        return loss_per_token, num_toks
 
     def train_round(self, data_loader):
         """
@@ -239,7 +239,7 @@ class GNMTTrainer:
                 for metric in self.metrics:
                     metric_value = metric(loss, translated, targets)
                     size = src[0].shape[0] if self.batch_first else src[0].shape[1]
-                    print(metric_value)
+
                     metric.update(metric_value, size)
 
         metrics_averages = {metric: metric.average().item() for metric in self.metrics}

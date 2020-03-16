@@ -193,7 +193,13 @@ class BLEUScore(MLBenchMetric):
         Returns:
             float: BLEU score
         """
-        return torch.tensor([sacrebleu.corpus_bleu(target, [output]).score])
+        return torch.tensor(
+            [
+                sacrebleu.corpus_bleu(
+                    output, [target], tokenize="intl", lowercase=True
+                ).score
+            ]
+        )
 
     @property
     def name(self):

@@ -1,5 +1,6 @@
 import torch
 import torch.distributed as dist
+from mlbench_core.dataset.translation.pytorch.config import BOS, EOS
 from mlbench_core.evaluation.pytorch.inference.beam_search import SequenceGenerator
 
 
@@ -21,28 +22,24 @@ class Translator:
         self,
         model,
         trg_tokenizer,
-        BOS_idx,
-        EOS_idx,
         beam_size=5,
         len_norm_factor=0.6,
         len_norm_const=5.0,
         cov_penalty_factor=0.1,
-        max_seq_len=50,
+        max_seq_len=150,
     ):
 
         self.model = model
         self.tokenizer = trg_tokenizer
-        self.insert_target_start = [BOS_idx]
-        self.insert_src_start = [BOS_idx]
-        self.insert_src_end = [EOS_idx]
+        self.insert_target_start = [BOS]
+        self.insert_src_start = [BOS]
+        self.insert_src_end = [EOS]
         self.batch_first = model.batch_first
         self.beam_size = beam_size
 
         self.generator = SequenceGenerator(
             model=self.model,
             beam_size=beam_size,
-            BOS_idx=BOS_idx,
-            EOS_idx=EOS_idx,
             max_seq_len=max_seq_len,
             len_norm_factor=len_norm_factor,
             len_norm_const=len_norm_const,
@@ -54,11 +51,11 @@ class Translator:
         if self.batch_first:
             for i in range(batch_size):
                 t = trg[i]
-                targets.append(self.tokenizer.detokenize(t))
+                targets.append(self.tokenizer.detokenize(t.tolist()))
         else:
             for i in range(batch_size):
                 t = trg[:, i]
-                targets.append(self.tokenizer.detokenize(t))
+                targets.append(self.tokenizer.detokenize(t.tolist()))
 
         return targets
 

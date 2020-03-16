@@ -1,5 +1,7 @@
 import torch
 
+from mlbench_core.dataset.translation.pytorch.config import BOS, EOS
+
 
 class SequenceGenerator:
     """
@@ -9,8 +11,6 @@ class SequenceGenerator:
     def __init__(
         self,
         model,
-        BOS_idx,
-        EOS_idx,
         beam_size=5,
         max_seq_len=100,
         len_norm_factor=0.6,
@@ -34,7 +34,6 @@ class SequenceGenerator:
 
         self.model = model
         self.beam_size = beam_size
-        self.BOS, self.EOS = BOS_idx, EOS_idx
         self.max_seq_len = max_seq_len
         self.len_norm_factor = len_norm_factor
         self.len_norm_const = len_norm_const
@@ -66,7 +65,7 @@ class SequenceGenerator:
         active = torch.arange(0, batch_size, dtype=torch.int64, device=device)
         base_mask = torch.arange(0, batch_size, dtype=torch.int64, device=device)
 
-        translation[:, 0] = self.BOS
+        translation[:, 0] = BOS
         words, context = initial_input, initial_context
 
         if self.batch_first:
@@ -90,7 +89,7 @@ class SequenceGenerator:
             translation[active, idx] = words
             lengths[active] += 1
 
-            terminating = words == self.EOS
+            terminating = words == EOS
 
             if terminating.any():
                 not_terminating = ~terminating
@@ -145,7 +144,7 @@ class SequenceGenerator:
             [0] + (beam_size - 1) * [float("-inf")], dtype=torch.float32, device=device
         )
 
-        translation[:, 0] = self.BOS
+        translation[:, 0] = BOS
 
         words, context = initial_input, initial_context
 
@@ -194,7 +193,7 @@ class SequenceGenerator:
                 break
             counter += 1
 
-            eos_mask = words == self.EOS
+            eos_mask = words == EOS
             eos_mask = eos_mask.view(-1, beam_size)
 
             terminating, _ = eos_mask.min(dim=1)
@@ -210,7 +209,7 @@ class SequenceGenerator:
 
             # words: (batch, beam, k)
             words = words.view(-1, beam_size, beam_size)
-            words = words.masked_fill(eos_mask.unsqueeze(2), self.EOS)
+            words = words.masked_fill(eos_mask.unsqueeze(2), EOS)
 
             # logprobs: (batch, beam, k)
             logprobs = logprobs.float().view(-1, beam_size, beam_size)

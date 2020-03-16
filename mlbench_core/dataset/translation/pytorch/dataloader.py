@@ -6,13 +6,19 @@ from torchtext.data import Example, Dataset
 
 
 def _construct_filter_pred(min_len, max_len):
-    filter_pred = lambda x: not (len(x[0]) < min_len or len(x[1]) < min_len)
+    """
+    Constructs a filter predicate
+    Args:
+        min_len (int): Min sentence length
+        max_len (int): Max sentence length
+
+    Returns:
+        func
+    """
+    filter_pred = lambda x: not (x[0] < min_len or x[1] < min_len)
     if max_len is not None:
         filter_pred = lambda x: not (
-                len(x[0]) < min_len
-                or len(x[0]) > max_len
-                or len(x[1]) < min_len
-                or len(x[1]) > max_len
+            x[0] < min_len or x[0] > max_len or x[1] < min_len or x[1] > max_len
         )
 
     return filter_pred
@@ -26,12 +32,14 @@ def process_data(path, filter_pred, fields, lazy=False):
     src_path, trg_path = tuple(os.path.expanduser(path + x) for x in config.EXTS)
     examples = []
     with open(src_path, mode="r", encoding="utf-8") as src_file, open(
-            trg_path, mode="r", encoding="utf-8"
+        trg_path, mode="r", encoding="utf-8"
     ) as trg_file:
         for src_line, trg_line in zip(src_file, trg_file):
             src_line, trg_line = src_line.strip(), trg_line.strip()
 
-            should_consider = filter_pred((src_line, trg_line))
+            should_consider = filter_pred(
+                (src_line.count(" ") + 1, trg_line.count(" ") + 1)
+            )
             if src_line != "" and trg_line != "" and should_consider:
                 if lazy:
                     examples.append((src_line, trg_line))
@@ -52,18 +60,18 @@ class WMT14Dataset(Dataset):
     dirname = ""
 
     def __init__(
-            self,
-            root,
-            batch_first=False,
-            include_lengths=False,
-            lang=None,
-            math_precision=None,
-            download=True,
-            train=False,
-            validation=False,
-            lazy=False,
-            min_len=0,
-            max_len=None,
+        self,
+        root,
+        batch_first=False,
+        include_lengths=False,
+        lang=None,
+        math_precision=None,
+        download=True,
+        train=False,
+        validation=False,
+        lazy=False,
+        min_len=0,
+        max_len=None,
     ):
         """WMT14 Dataset.
 
@@ -87,17 +95,21 @@ class WMT14Dataset(Dataset):
         else:
             path = os.path.join(root, "wmt14")
 
-        src_tokenizer = WMT14Tokenizer(root,
-                                       batch_first=batch_first,
-                                       include_lengths=include_lengths,
-                                       lang=lang,
-                                       math_precision=math_precision)
-        trg_tokenizer = WMT14Tokenizer(root,
-                                       batch_first=batch_first,
-                                       include_lengths=include_lengths,
-                                       lang=lang,
-                                       math_precision=math_precision,
-                                       is_target=True)
+        src_tokenizer = WMT14Tokenizer(
+            root,
+            batch_first=batch_first,
+            include_lengths=include_lengths,
+            lang=lang,
+            math_precision=math_precision,
+        )
+        trg_tokenizer = WMT14Tokenizer(
+            root,
+            batch_first=batch_first,
+            include_lengths=include_lengths,
+            lang=lang,
+            math_precision=math_precision,
+            is_target=True,
+        )
 
         self.vocab_size = src_tokenizer.vocab_size
         self.list_fields = [("src", src_tokenizer), ("trg", trg_tokenizer)]
