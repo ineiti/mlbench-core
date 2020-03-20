@@ -24,7 +24,7 @@ def _construct_filter_pred(min_len, max_len):
     return filter_pred
 
 
-def process_data(path, filter_pred, fields, lazy=False):
+def process_data(path, filter_pred, fields, lazy=False, max_size=None):
     """
     Loads data from the input file.
     """
@@ -45,6 +45,9 @@ def process_data(path, filter_pred, fields, lazy=False):
                     examples.append((src_line, trg_line))
                 else:
                     examples.append(Example.fromlist([src_line, trg_line], fields))
+
+            if max_size and len(examples) >= max_size:
+                break
     return examples
 
 
@@ -72,6 +75,7 @@ class WMT14Dataset(Dataset):
         lazy=False,
         min_len=0,
         max_len=None,
+        max_size=None,
     ):
         """WMT14 Dataset.
 
@@ -130,6 +134,7 @@ class WMT14Dataset(Dataset):
             filter_pred=_construct_filter_pred(min_len, max_len),
             fields=self.list_fields,
             lazy=lazy,
+            max_size=max_size,
         )
 
     def __len__(self):

@@ -3,7 +3,6 @@ import logging
 import torch
 import torch.optim
 import torch.utils.data
-
 from mlbench_core.utils import AverageMeter
 from mlbench_core.utils.pytorch.distributed import global_average
 
@@ -112,27 +111,15 @@ class GNMTTrainer:
 
         return loss, loss_per_token, loss_per_sentence, num_toks
 
-    def feed_data(self, data_loader):
-        """
-        Runs training or validation on batches from data_loader.
-        """
-
-        if self.tracker:
-            self.tracker.train()
-
-        losses_per_token = AverageMeter()
-
-        num_batches_per_device_train = len(data_loader)
-
-        if self.schedule_per == "epoch":
-            self.scheduler.step()
-
-        for batch_idx, data in enumerate(data_loader):
-            loss_per_token, num_toks = self.optimize(
-                batch_idx, data, num_batches_per_device_train
-            )
-            losses_per_token.update(loss_per_token, num_toks["tgt"])
-        return losses_per_token.avg
+    # def train_bleu_score(self, data):
+    #     src, trg = data.src, data.trg
+    #     translated, targets = self.translator.translate(src, trg)
+    #     for metric in self.metrics:
+    #         if metric.name == "BLEU-Score":
+    #             metric_value = metric(None, translated, targets)
+    #             return metric_value
+    #
+    #     return None
 
     def optimize(self, batch_idx, data, num_batches_per_device_train):
 
@@ -197,7 +184,26 @@ class GNMTTrainer:
 
         return loss_per_token, num_toks
 
-    def train_round(self, data_loader):
+    def _training(self):
+        torch.set_grad_enabled(True)
+        self.model.train()
+
+        if self.tracker:
+            self.tracker.train()
+
+    def _eval(self):
+
+        torch.set_grad_enabled(False)
+        self.model.eval()
+
+        # Set tracker in validation mode
+        if self.tracker:
+            self.tracker.validation()
+            self.tracker.validation_start()
+
+    def train_round(
+        self, train_loader, val_loader, bleu_score=False, validate_every=None
+    ):
         """
         Sets model in training mode, preallocates memory and runs training on
         data provided by data_loader.
@@ -207,11 +213,24 @@ class GNMTTrainer:
         Returns:
 
         """
-        torch.set_grad_enabled(True)
-        self.model.train()
+        # Set in training mode
+        self._training()
+        # losses_per_token = AverageMeter()
 
-        output = self.feed_data(data_loader)
-        return output
+        num_batches_per_device_train = len(train_loader)
+
+        if self.schedule_per == "epoch":
+            self.scheduler.step()
+
+        for batch_idx, data in enumerate(train_loader):
+            loss_per_token, num_toks = self.optimize(
+                batch_idx, data, num_batches_per_device_train
+            )
+            # losses_per_token.update(loss_per_token, num_toks["tgt"])
+
+            if bleu_score and (batch_idx + 1) % validate_every == 0:
+                self.validation_round(val_loader)
+                self._training()
 
     def validate(self, loader):
         losses = AverageMeter()
@@ -254,15 +273,7 @@ class GNMTTrainer:
         :param data_loader: data loader
         """
         tracker = self.tracker
-
-        torch.set_grad_enabled(False)
-        self.model.eval()
-
-        # Set tracker in validation mode
-        if tracker:
-            tracker.validation()
-            tracker.validation_start()
-
+        self._eval()
         # Gather metrics and loss average
         metrics_values, loss = self.validate(data_loader)
         if tracker:
