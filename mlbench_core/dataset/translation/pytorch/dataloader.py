@@ -54,8 +54,7 @@ def process_data(path, filter_pred, fields, lazy=False, max_size=None):
 class WMT14Dataset(Dataset):
     urls = [
         (
-            "https://drive.google.com/uc?export=download&"
-            "id=0B_bZck-ksdkpM25jRUN2X2UxMm8",
+            "https://storage.googleapis.com/mlbench-datasets/translation/wmt16_en_de.tar.gz",
             "wmt16_en_de.tar.gz",
         )
     ]
