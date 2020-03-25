@@ -128,14 +128,6 @@ class WMT14Tokenizer:
 
         self.is_target = is_target
 
-    def set_is_target(self, val):
-        """
-        Sets the `is_target` flag required for BucketIterator
-        Args:
-            val (bool): False or true
-        """
-        self.is_target = val
-
     def process(self, batch, device=None):
         """
         Processes a batch of inputs by segmenting and putting in
@@ -169,17 +161,9 @@ class WMT14Tokenizer:
         Returns:
             list representing tokenized sentence
         """
-        # line = line.strip().split()
         entry = [self.tok2idx[i] for i in line]
         entry = [config.BOS] + entry + [config.EOS]
         return entry
-
-    def tokenize(self, line, device=None):
-        tokenized = self.moses_tokenizer.tokenize(line, return_str=True)
-        bpe = self.bpe.process_line(tokenized)
-        segmented = self.segment(bpe)
-        tensor = torch.tensor(segmented, device=device)
-        return tensor
 
     def detokenize_bpe(self, inp, delim=" "):
         """

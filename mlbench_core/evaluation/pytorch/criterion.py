@@ -159,8 +159,9 @@ class LabelSmoothing(nn.Module):
         """
         Constructor for the LabelSmoothing module.
 
-        :param padding_idx: index of the PAD token
-        :param smoothing: label smoothing factor
+        Args:
+            padding_idx (int): Code for padding char
+            smoothing (float): Smoothing value
         """
         super(LabelSmoothing, self).__init__()
         self.padding_idx = padding_idx

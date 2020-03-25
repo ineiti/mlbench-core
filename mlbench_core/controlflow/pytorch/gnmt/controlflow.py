@@ -111,28 +111,18 @@ class GNMTTrainer:
 
         return loss, loss_per_token, loss_per_sentence, num_toks
 
-    # def train_bleu_score(self, data):
-    #     src, trg = data.src, data.trg
-    #     translated, targets = self.translator.translate(src, trg)
-    #     for metric in self.metrics:
-    #         if metric.name == "BLEU-Score":
-    #             metric_value = metric(None, translated, targets)
-    #             return metric_value
-    #
-    #     return None
-
     def optimize(self, batch_idx, data, num_batches_per_device_train):
 
+        # Whether to update the weights at this iteration
+        update = (batch_idx % self.iter_size) == self.iter_size - 1
         if self.tracker:
             self.tracker.batch_start()
 
-        if self.schedule_per == "batch":
-            self.scheduler.step()
-
         # Clear gradients in the optimizer.
-        self.fp_optimizer.zero_grad()
-        if self.tracker:
-            self.tracker.record_batch_step("init")
+        if (batch_idx % self.iter_size) == 0:
+            self.fp_optimizer.zero_grad()
+            if self.tracker:
+                self.tracker.record_batch_step("init")
 
         # Compute the output
         src, tgt = data.src, data.trg
@@ -156,15 +146,19 @@ class GNMTTrainer:
             self.tracker.record_batch_step("backprop")
 
         # Opt step
-        self.fp_optimizer.step()
+        if update:
+            self.fp_optimizer.step()
+
+            if self.tracker:
+                self.tracker.record_batch_step("opt_step")
+
+        # Learning rate sheduler
+        if update and self.schedule_per == "batch":
+            print("global_lr = {}", self.scheduler.get_lr()[0])
+            self.scheduler.step()
 
         if self.tracker:
-            self.tracker.record_batch_step("opt_step")
-
             self.tracker.batch_end()
-
-        # Get translated sequence and record train stats
-        # translated, targets = self.translator.translate(src, tgt)
 
         if self.batch_first:
             batch_size = output.size(0)
@@ -181,8 +175,6 @@ class GNMTTrainer:
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-
-        return loss_per_token, num_toks
 
     def _training(self):
         torch.set_grad_enabled(True)
@@ -215,7 +207,6 @@ class GNMTTrainer:
         """
         # Set in training mode
         self._training()
-        # losses_per_token = AverageMeter()
 
         num_batches_per_device_train = len(train_loader)
 
@@ -223,10 +214,7 @@ class GNMTTrainer:
             self.scheduler.step()
 
         for batch_idx, data in enumerate(train_loader):
-            loss_per_token, num_toks = self.optimize(
-                batch_idx, data, num_batches_per_device_train
-            )
-            # losses_per_token.update(loss_per_token, num_toks["tgt"])
+            self.optimize(batch_idx, data, num_batches_per_device_train)
 
             if bleu_score and (batch_idx + 1) % validate_every == 0:
                 self.validation_round(val_loader)

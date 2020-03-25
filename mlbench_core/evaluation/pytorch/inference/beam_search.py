@@ -24,14 +24,14 @@ class SequenceGenerator:
         normalization. For details, refer to Section 7 of the GNMT paper
         (https://arxiv.org/pdf/1609.08144.pdf).
 
-        :param model: model which implements generate method
-        :param beam_size: decoder beam size
-        :param max_seq_len: maximum decoder sequence length
-        :param len_norm_factor: length normalization factor
-        :param len_norm_const: length normalization constant
-        :param cov_penalty_factor: coverage penalty factor
+        Args:
+            model: model which implements generate method
+            beam_size (int): decoder beam size
+            max_seq_len (int):  maximum decoder sequence length
+            len_norm_factor (float): length normalization factor
+            len_norm_const (int): length normalization constant
+            cov_penalty_factor (float): coverage penalty factor
         """
-
         self.model = model
         self.beam_size = beam_size
         self.max_seq_len = max_seq_len
@@ -45,12 +45,13 @@ class SequenceGenerator:
         """
         Greedy decoder.
 
-        :param batch_size: decoder batch size
-        :param initial_input: initial input, usually tensor of BOS tokens
-        :param initial_context: initial context, usually [encoder_context,
-            src_seq_lengths, None]
+        Args:
+            batch_size (int): decoder batch size
+            initial_input (torch.tensor): initial input, usually tensor of BOS tokens
+            initial_context (torch.tensor):  initial context, usually [encoder_context,
+                src_seq_lengths, None]
 
-        returns: (translation, lengths, counter)
+        Returns: (translation, lengths, counter)
             translation: (batch_size, max_seq_len) - indices of target tokens
             lengths: (batch_size) - lengths of generated translations
             counter: number of iterations of the decoding loop
@@ -107,14 +108,15 @@ class SequenceGenerator:
 
     def beam_search(self, batch_size, initial_input, initial_context=None):
         """
-        Beam search decoder.
+        Beam Search decoder.
 
-        :param batch_size: decoder batch size
-        :param initial_input: initial input, usually tensor of BOS tokens
-        :param initial_context: initial context, usually [encoder_context,
-            src_seq_lengths, None]
+        Args:
+            batch_size (int): decoder batch size
+            initial_input (torch.tensor): initial input, usually tensor of BOS tokens
+            initial_context (torch.tensor):  initial context, usually [encoder_context,
+                src_seq_lengths, None]
 
-        returns: (translation, lengths, counter)
+        Returns: (translation, lengths, counter)
             translation: (batch_size, max_seq_len) - indices of target tokens
             lengths: (batch_size) - lengths of generated translations
             counter: number of iterations of the decoding loop
