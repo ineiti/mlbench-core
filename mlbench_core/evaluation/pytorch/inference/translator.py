@@ -1,16 +1,6 @@
 import torch
-import torch.distributed as dist
 from mlbench_core.dataset.translation.pytorch.config import BOS, EOS
 from mlbench_core.evaluation.pytorch.inference.beam_search import SequenceGenerator
-
-
-def gather_predictions(preds):
-    world_size = dist.get_world_size()
-    if world_size > 1:
-        all_preds = [preds.new(preds.size(0), preds.size(1)) for _ in range(world_size)]
-        dist.all_gather(all_preds, preds)
-        preds = torch.cat(all_preds)
-    return preds
 
 
 class Translator:
@@ -96,11 +86,10 @@ class Translator:
             context = [context, src_len, None]
             preds, lengths, counter = generator(batch_size, bos, context)
 
-        preds = gather_predictions(preds).cpu()
+        preds = preds.cpu()
+        targets = self.get_detokenized_target(trg, batch_size)
 
         output = []
-        targets = []
-        targets += self.get_detokenized_target(trg, batch_size)
         for pred in preds:
             pred = pred.tolist()
             detok = self.tokenizer.detokenize(pred)

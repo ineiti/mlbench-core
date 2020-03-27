@@ -154,7 +154,6 @@ class GNMTTrainer:
 
         # Learning rate sheduler
         if update and self.schedule_per == "batch":
-            print("global_lr = {}", self.scheduler.get_lr()[0])
             self.scheduler.step()
 
         if self.tracker:
