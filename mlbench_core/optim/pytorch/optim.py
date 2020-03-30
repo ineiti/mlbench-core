@@ -446,6 +446,8 @@ class CentralizedAdam(Adam):
             algorithm from the paper `On the Convergence of Adam and Beyond`_
             (default: False)
         average_models (bool): Whether to average models together. (default: `True`)
+        cast_in (type): Cast input of aggregation. Use for Mixed precision (default: `None`)
+        cast_out (type): Cast output of aggregation. Use for Mixed precision (default: `None`)
 
     """
 
@@ -478,8 +480,8 @@ class CentralizedAdam(Adam):
             closure (callable, optional): A closure that reevaluates the model
                 and returns the loss.
         """
-        self.agg(self.model, self.agg_mode)
         loss = super(CentralizedAdam, self).step(closure=closure)
+        self.agg(self.model, self.agg_mode)
         return loss
 
 
@@ -488,16 +490,22 @@ class FP32Optimizer:
     Standard optimizer, computes backward and applies weight update.
     """
 
-    def __init__(self, model, optimizer, grad_clip=None):
+    def __init__(self, model, optimizer, grad_clip=None, world_size=1, average_models=True):
         """
         Constructor for the Fp32Optimizer
 
         :param grad_clip: coefficient for gradient clipping, max L2 norm of the
             gradients
         """
+        self.model = model
         self.params = model.parameters()
         self.grad_clip = grad_clip
         self.optimizer = optimizer
+        self.agg = AllReduceAggregation(world_size=world_size).agg_grad
+        if average_models:
+            self.agg_mode = "avg"
+        else:
+            raise NotImplementedError("Only average model is supported right now.")
 
     def step(self):
         """
@@ -507,9 +515,10 @@ class FP32Optimizer:
         :param optimizer: optimizer
         :param update: if True executes weight update
         """
+        self.agg(self.model, self.agg_mode)
         if self.grad_clip != float("inf"):
             clip_grad_norm_(self.params, self.grad_clip)
-        self.optimizer.step()
+        return self.optimizer.step()
 
     def backward_loss(self, loss):
         loss.backward()
@@ -532,6 +541,8 @@ class AMPOptimizer:
         grad_clip=None,
         loss_scale=8192,
         dls_upscale_interval=128,
+        world_size=1,
+        average_models=True
     ):
         """
         Constructor for the AMPOptimizer
@@ -540,11 +551,19 @@ class AMPOptimizer:
         :param grad_clip: coefficient for gradient clipping, max L2 norm of the
             gradients
         """
+        self.model = model
         self.grad_clip = grad_clip
         self.optimizer = optimizer
         loss_scaler = amp._amp_state.loss_scalers[0]
         loss_scaler._loss_scale = loss_scale
         loss_scaler._scale_seq_len = dls_upscale_interval
+        self.agg = AllReduceAggregation(world_size=world_size,
+                                        cast_in=torch.float32,
+                                        cast_out=torch.float16).agg_grad
+        if average_models:
+            self.agg_mode = "avg"
+        else:
+            raise NotImplementedError("Only average model is supported right now.")
 
     def backward_loss(self, loss):
         with amp.scale_loss(loss, self.optimizer) as scaled_loss:
@@ -558,6 +577,7 @@ class AMPOptimizer:
         :param optimizer: optimizer
         :param update: if True executes weight update
         """
+        self.agg(self.model, self.agg_mode)
         if self.grad_clip != float("inf"):
             clip_grad_norm_(amp.master_params(self.optimizer), self.grad_clip)
         self.optimizer.step()

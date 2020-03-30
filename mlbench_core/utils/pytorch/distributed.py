@@ -78,8 +78,10 @@ class Aggregation(object):
 class AllReduceAggregation(Aggregation):
     """Aggregate udpates / models from different processes."""
 
-    def __init__(self, world_size):
+    def __init__(self, world_size, cast_in=None, cast_out=None):
         self.world_size = world_size
+        self.cast_in = cast_in
+        self.cast_out = cast_out
 
     def _agg(self, data, op):
         """Aggregate data using `op` operation.
@@ -92,10 +94,16 @@ class AllReduceAggregation(Aggregation):
             :obj:`torch.Tensor`: An aggregated tensor.
         """
         if op == "avg":
+            if self.cast_in is not None:
+                data = data.to(self.cast_in)
+
             dist.all_reduce(data, op=dist.reduce_op.SUM)
             data /= self.world_size
         else:
             raise NotImplementedError
+
+        if self.cast_out is not None:
+            return data.to(self.cast_out)
         return data
 
 
