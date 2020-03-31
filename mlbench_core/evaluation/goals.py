@@ -150,8 +150,7 @@ def task4_time_to_bleu_goal(threshold=24):
         if value >= threshold:
             duration = tracker.get_total_train_time()
             result = "Validation BLEU-Score of {0} reached in {1:.3f} seconds".format(
-                threshold,
-                duration
+                threshold, duration
             )
 
             result = _add_detailed_times(result, tracker)

@@ -490,7 +490,9 @@ class FP32Optimizer:
     Standard optimizer, computes backward and applies weight update.
     """
 
-    def __init__(self, model, optimizer, grad_clip=None, world_size=1, average_models=True):
+    def __init__(
+        self, model, optimizer, grad_clip=None, world_size=1, average_models=True
+    ):
         """
         Constructor for the Fp32Optimizer
 
@@ -542,7 +544,7 @@ class AMPOptimizer:
         loss_scale=8192,
         dls_upscale_interval=128,
         world_size=1,
-        average_models=True
+        average_models=True,
     ):
         """
         Constructor for the AMPOptimizer
@@ -557,9 +559,9 @@ class AMPOptimizer:
         loss_scaler = amp._amp_state.loss_scalers[0]
         loss_scaler._loss_scale = loss_scale
         loss_scaler._scale_seq_len = dls_upscale_interval
-        self.agg = AllReduceAggregation(world_size=world_size,
-                                        cast_in=torch.float32,
-                                        cast_out=torch.float16).agg_grad
+        self.agg = AllReduceAggregation(
+            world_size=world_size, cast_in=torch.float32, cast_out=torch.float16
+        ).agg_grad
         if average_models:
             self.agg_mode = "avg"
         else:

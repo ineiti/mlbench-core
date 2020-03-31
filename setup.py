@@ -73,6 +73,6 @@ setup(
     test_suite="tests",
     tests_require=test_requirements,
     url="https://github.com/mlbench/mlbench_core",
-    version="2.3.1-dev50",
+    version="2.3.1-dev61",
     zip_safe=False,
 )
