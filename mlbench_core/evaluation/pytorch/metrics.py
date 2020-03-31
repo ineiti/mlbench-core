@@ -2,10 +2,14 @@
 
 from abc import abstractmethod
 
-import sacrebleu
 import torch
 from mlbench_core.utils import AverageMeter
 from mlbench_core.utils.pytorch.distributed import global_average
+
+try:
+    import sacrebleu
+except ImportError as e:
+    print("Sacrebleu not found")
 
 
 class MLBenchMetric(object):
