@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.distributed as dist
 from apex import amp
-from mlbench_core.utils.pytorch.distributed import AllReduceAggregation
+from mlbench_core.utils.pytorch.distributed import AllReduceAggregation, AllReduceAggregationFP16
 from mlbench_core.utils.pytorch.distributed import DecentralizedAggregation
 from torch.nn.utils import clip_grad_norm_
 from torch.optim import Adam, SGD
@@ -559,9 +559,7 @@ class AMPOptimizer:
         loss_scaler = amp._amp_state.loss_scalers[0]
         loss_scaler._loss_scale = loss_scale
         loss_scaler._scale_seq_len = dls_upscale_interval
-        self.agg = AllReduceAggregation(
-            world_size=world_size, cast_in=torch.float32, cast_out=torch.float16
-        ).agg_grad
+        self.agg = AllReduceAggregationFP16(world_size=world_size).agg_grad
         if average_models:
             self.agg_mode = "avg"
         else:

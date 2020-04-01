@@ -1,7 +1,11 @@
 import torch
 import torch.distributed as dist
+try:
+    import horovod.torch as hvd
+except ImportError as e:
+    print("Horovod not found")
 
-
+# TODO: those 3 functions don't seem to be used anywhere (maybe remove them ?)
 def broadcast(tensor, src):
     return dist.broadcast(tensor, src=src)
 
@@ -10,7 +14,7 @@ def elementwise_min(tensor):
     dist.all_reduce(tensor, op=dist.reduce_op.MIN)
     return tensor
 
-
+#
 def aggregate_gradients(model, world_size, average_models=False):
     """Average gradients of models across all processes."""
     # all_reduce the gradients.
@@ -78,10 +82,8 @@ class Aggregation(object):
 class AllReduceAggregation(Aggregation):
     """Aggregate udpates / models from different processes."""
 
-    def __init__(self, world_size, cast_in=None, cast_out=None):
+    def __init__(self, world_size):
         self.world_size = world_size
-        self.cast_in = cast_in
-        self.cast_out = cast_out
 
     def _agg(self, data, op):
         """Aggregate data using `op` operation.
@@ -94,16 +96,29 @@ class AllReduceAggregation(Aggregation):
             :obj:`torch.Tensor`: An aggregated tensor.
         """
         if op == "avg":
-            if self.cast_in is not None:
-                data = data.to(self.cast_in)
-
             dist.all_reduce(data, op=dist.reduce_op.SUM)
             data /= self.world_size
         else:
             raise NotImplementedError
+        return data
 
-        if self.cast_out is not None:
-            return data.to(self.cast_out)
+
+class AllReduceAggregationFP16(AllReduceAggregation):
+
+    def _agg(self, data, op):
+        """Aggregate data using `op` operation.
+
+        Args:
+            data (:obj:`torch.Tensor`): A Tensor to be aggregated (Should be `torch.float16`)
+            op (str): Aggregation methods like `avg`, `sum`, `min`, `max`, etc.
+
+        Returns:
+            :obj:`torch.Tensor`: An aggregated tensor.
+        """
+        if op == "avg":
+            data = hvd.allreduce(data, op=hvd.Sum) / self.world_size
+        else:
+            raise NotImplementedError
         return data
 
 
